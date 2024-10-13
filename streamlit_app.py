@@ -15,6 +15,7 @@ from langchain_community.document_loaders import UnstructuredPowerPointLoader
 from langchain.text_splitter import RecursiveCharacterTextSplitter
 from langchain_huggingface import HuggingFaceEmbeddings
 from transformers import AutoTokenizer
+from langchain_openai import OpenAIEmbeddings
 
 from langchain_community.vectorstores import FAISS
 
@@ -76,7 +77,7 @@ def main():
             # Split
             text_chunks = get_text_chunks(files_text, embedding_model_name)
             # Store
-            vetorestore = get_vectorstore(text_chunks, embedding_model_name)
+            vetorestore = get_vectorstore(text_chunks, openai_api_key, embedding_model_name)
 
             ensemble_retriever = get_ensemble_retriever(vetorestore, text_chunks)
             st.session_state.conversation = get_conversation_chain(ensemble_retriever, openai_api_key, st.session_state.model_selection)
@@ -168,7 +169,7 @@ def get_text(docs):
         doc_list.extend(load_document(doc))
     return doc_list
 
-def get_text_chunks(text: str, embedding_model_name: str):
+def get_text_chunks(text: str, embedding_model_name: str=''):
     """
     주어진 텍스트를 지정된 임베딩 모델의 토크나이저를 사용하여 청크로 분할합니다.
 
@@ -179,17 +180,18 @@ def get_text_chunks(text: str, embedding_model_name: str):
     Returns:
         List[str]: 텍스트 청크의 리스트입니다.
     """
-    tokenizer = AutoTokenizer.from_pretrained(embedding_model_name)
-    text_splitter = RecursiveCharacterTextSplitter.from_huggingface_tokenizer(
-        tokenizer=tokenizer,
-        chunk_size=900, 
-        chunk_overlap=100
-    )
+    # tokenizer = AutoTokenizer.from_pretrained(embedding_model_name)
+    # text_splitter = RecursiveCharacterTextSplitter.from_huggingface_tokenizer(
+    #     tokenizer=tokenizer,
+    #     chunk_size=900, 
+    #     chunk_overlap=100
+    # )
+    text_splitter = RecursiveCharacterTextSplitter(chunk_size=700, chunk_overlap=100)
     chunks = text_splitter.split_documents(text)
     return chunks
 
 
-def get_vectorstore(text_chunks: str, embedding_model_name: str):
+def get_vectorstore(text_chunks: str, openai_api_key: str, embedding_model_name: str):
     """
     주어진 텍스트 청크를 지정된 임베딩 모델을 사용하여 벡터 저장소로 생성합니다.
     Args:
@@ -200,16 +202,13 @@ def get_vectorstore(text_chunks: str, embedding_model_name: str):
     Raises:
         ValueError: text_chunks 입력이 비어 있는 경우 발생합니다.
     """
-    embeddings = HuggingFaceEmbeddings(
-        model_name=embedding_model_name,
-        model_kwargs={'device': 'cpu'},
-        encode_kwargs={'normalize_embeddings': True}
-    )
-        
-    # 텍스트 청크가 비어 있는지 확인
-    if not text_chunks:
-        raise ValueError("text_chunks is empty")
-    
+    # embeddings = HuggingFaceEmbeddings(
+    #     model_name=embedding_model_name,
+    #     model_kwargs={'device': 'cpu'},
+    #     encode_kwargs={'normalize_embeddings': True}
+    # )
+
+    embeddings = OpenAIEmbeddings(openai_api_key = openai_api_key)
     vectordb = FAISS.from_documents(text_chunks, embeddings)
     return vectordb
 
