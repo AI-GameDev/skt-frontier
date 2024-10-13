@@ -1,5 +1,14 @@
 streamlit
 langchain
-openai
-langchain_openai
 langchain_community
+sentence-transformers
+pypdf
+faiss-cpu
+openai
+langchain_huggingface
+langchain-openai
+kiwipiepy
+rank_bm25
+unstructured
+python-pptx
+docx2txt
