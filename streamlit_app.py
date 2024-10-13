@@ -13,9 +13,10 @@ from langchain_community.document_loaders import Docx2txtLoader
 from langchain_community.document_loaders import UnstructuredPowerPointLoader
 
 from langchain.text_splitter import RecursiveCharacterTextSplitter
+from langchain_openai import OpenAIEmbeddings
+# 한국어 Embedding 모델을 사용하는 경우
 from langchain_huggingface import HuggingFaceEmbeddings
 from transformers import AutoTokenizer
-from langchain_openai import OpenAIEmbeddings
 
 from langchain_community.vectorstores import FAISS
 
@@ -73,14 +74,19 @@ def main():
             # Load
             files_text = get_text(uploaded_files)
 
-            embedding_model_name = 'intfloat/multilingual-e5-large-instruct'
+            # embedding_model_name = 'intfloat/multilingual-e5-large-instruct'
+            embedding_model_name = ''
             # Split
-            text_chunks = get_text_chunks(files_text, embedding_model_name)
+            text_chunks = get_text_chunks(files_text)
             # Store
-            vetorestore = get_vectorstore(text_chunks, openai_api_key, embedding_model_name)
+            vetorestore = get_vectorstore(text_chunks, openai_api_key)
 
             ensemble_retriever = get_ensemble_retriever(vetorestore, text_chunks)
             st.session_state.conversation = get_conversation_chain(ensemble_retriever, openai_api_key, st.session_state.model_selection)
+
+            st.session_state.messages.clear()
+            st.session_state['messages'] = [{"role": "assistant",
+                                         "content": "안녕하세요! SKT-Frontier RAG chatbot 입니다. 주어진 문서에 대해 궁금한 점을 물어보세요."}]
 
             st.session_state.processComplete = True
 
@@ -103,15 +109,15 @@ def main():
 
             with st.chat_message("assistant"):
                 with st.spinner("Thinking..."):
-                    result = st.session_state.conversation.invoke({"query": query})
-                    response = result['result']
-                    source_documents = result['source_documents']
-                    st.markdown(response)
+                    response = st.session_state.conversation.invoke({"query": query})
+                    result = response['result']
+                    source_documents = response['source_documents']
+                    st.markdown(result)
                     with st.expander("참고 문서 확인"):
                         for doc in source_documents:
                             st.markdown(doc.metadata['source'], help=doc.page_content)
             # 어시스턴트 메시지를 채팅 기록에 추가
-            st.session_state.messages.append({"role": "assistant", "content": response})
+            st.session_state.messages.append({"role": "assistant", "content": result})
     else:
         st.info("질문하기 전에 문서를 업로드하고 'Process'를 클릭하세요.")
 
@@ -180,18 +186,20 @@ def get_text_chunks(text: str, embedding_model_name: str=''):
     Returns:
         List[str]: 텍스트 청크의 리스트입니다.
     """
-    # tokenizer = AutoTokenizer.from_pretrained(embedding_model_name)
-    # text_splitter = RecursiveCharacterTextSplitter.from_huggingface_tokenizer(
-    #     tokenizer=tokenizer,
-    #     chunk_size=900, 
-    #     chunk_overlap=100
-    # )
-    text_splitter = RecursiveCharacterTextSplitter(chunk_size=700, chunk_overlap=100)
+    if embedding_model_name == '':
+        text_splitter = RecursiveCharacterTextSplitter(chunk_size=700, chunk_overlap=100)
+    else:
+        tokenizer = AutoTokenizer.from_pretrained(embedding_model_name)
+        text_splitter = RecursiveCharacterTextSplitter.from_huggingface_tokenizer(
+            tokenizer=tokenizer,
+            chunk_size=900, 
+            chunk_overlap=100
+        )
     chunks = text_splitter.split_documents(text)
     return chunks
 
 
-def get_vectorstore(text_chunks: str, openai_api_key: str, embedding_model_name: str):
+def get_vectorstore(text_chunks: str, openai_api_key: str, embedding_model_name: str = ''):
     """
     주어진 텍스트 청크를 지정된 임베딩 모델을 사용하여 벡터 저장소로 생성합니다.
     Args:
@@ -202,13 +210,14 @@ def get_vectorstore(text_chunks: str, openai_api_key: str, embedding_model_name:
     Raises:
         ValueError: text_chunks 입력이 비어 있는 경우 발생합니다.
     """
-    # embeddings = HuggingFaceEmbeddings(
-    #     model_name=embedding_model_name,
-    #     model_kwargs={'device': 'cpu'},
-    #     encode_kwargs={'normalize_embeddings': True}
-    # )
-
-    embeddings = OpenAIEmbeddings(openai_api_key = openai_api_key)
+    if embedding_model_name == '':
+        embeddings = OpenAIEmbeddings(openai_api_key = openai_api_key)
+    else:
+        embeddings = HuggingFaceEmbeddings(
+            model_name=embedding_model_name,
+            model_kwargs={'device': 'cpu'},
+            encode_kwargs={'normalize_embeddings': True}
+        )
     vectordb = FAISS.from_documents(text_chunks, embeddings)
     return vectordb
 
@@ -268,7 +277,7 @@ def get_conversation_chain(retriever, openai_api_key, model_selection):
     # RetrievalQA 체인 생성
     rag_chain = RetrievalQA.from_chain_type(
         llm=llm,
-        chain_type="stuff",
+        # chain_type="stuff",
         retriever=retriever,
         return_source_documents=True,
         chain_type_kwargs={"prompt": rag_prompt}
