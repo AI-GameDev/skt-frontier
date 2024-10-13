@@ -1,13 +1,11 @@
 streamlit
 langchain
+langchain_openai
 langchain_community
-sentence-transformers
+kiwipiepy
+langchain_huggingface
 pypdf
 faiss-cpu
-openai
-langchain_huggingface
-langchain-openai
-kiwipiepy
 rank_bm25
 unstructured
 python-pptx
